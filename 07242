@@ -1,0 +1,130 @@
+import random
+import math
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 인코딩 함수
+def encode(x, lower_bound, upper_bound, len_bit):
+    scaled_x = int((x - lower_bound) / (upper_bound - lower_bound) * (2**len_bit - 1))
+    binary_str = bin(scaled_x)[2:]
+    binary_str_padded = binary_str.zfill(len_bit)
+    binary_array = np.array(list(binary_str_padded), dtype=int)
+    return binary_array
+
+# 디코딩 함수
+def decode(binary_array, lower_bound, upper_bound, len_bit):
+    binary_str = ''.join(binary_array.astype(str))
+    decimal = int(binary_str, 2)
+    x = lower_bound + decimal / (2**len_bit - 1) * (upper_bound - lower_bound)
+    return x
+
+# 목표 함수
+def objective_function(x1, x2):
+    return 21.5 + x1 * math.sin(4 * math.pi * x1) + x2 * math.sin(20 * math.pi * x2)
+
+# 이웃 해 생성 함수
+def neighbor_function(current_solution, len_bit):
+    x1_binary, x2_binary = current_solution
+    bit_to_flip = random.randint(0, len_bit - 1)  # 모든 비트 인덱스를 고려
+    x1_binary[bit_to_flip] = 1 - x1_binary[bit_to_flip]
+    bit_to_flip = random.randint(0, len_bit - 1)
+    x2_binary[bit_to_flip] = 1 - x2_binary[bit_to_flip]
+    return x1_binary, x2_binary
+
+# 시뮬레이티드 어닐링 알고리즘
+def simulated_annealing(initial_solution, initial_temp, cooling_rate, stop_temp, lower_bounds, upper_bounds, len_bit, internal_loops=100):
+    current_solution = initial_solution
+    current_x1 = decode(current_solution[0], lower_bounds[0], upper_bounds[0], len_bit)
+    current_x2 = decode(current_solution[1], lower_bounds[1], upper_bounds[1], len_bit)
+    current_value = objective_function(current_x1, current_x2)
+    best_solution = current_solution
+    best_value = current_value
+    temp = initial_temp
+
+    values = [current_value]
+    temps = [temp]
+
+    while temp > stop_temp:
+        for _ in range(internal_loops):
+            neighbor = neighbor_function(current_solution, len_bit)
+            neighbor_x1 = decode(neighbor[0], lower_bounds[0], upper_bounds[0], len_bit)
+            neighbor_x2 = decode(neighbor[1], lower_bounds[1], upper_bounds[1], len_bit)
+            neighbor_value = objective_function(neighbor_x1, neighbor_x2)
+
+            delta_value = neighbor_value - current_value
+            if delta_value > 0 or random.random() < math.exp(delta_value / temp):
+                current_solution = neighbor
+                current_value = neighbor_value
+
+                if neighbor_value > best_value:
+                    best_solution = neighbor
+                    best_value = neighbor_value
+
+                # 목표 값을 찾으면 조기 종료
+                if best_value >= 38:
+                    values.append(best_value)
+                    temps.append(temp)
+                    return best_solution, best_value, values, temps
+
+        temp *= cooling_rate
+        temps.append(temp)  # 온도 기록
+        values.append(current_value)
+
+    return best_solution, best_value, values, temps
+
+# 여러 번 시뮬레이티드 어닐링을 실행하여 최적의 결과를 찾기
+def find_best_solution(runs=10):
+    best_overall_value = float('-inf')
+    best_overall_solution = None
+    best_values = []
+    best_temps = []
+
+    for _ in range(runs):
+        x1_initial = random.uniform(lower_bounds[0], upper_bounds[0])
+        x2_initial = random.uniform(lower_bounds[1], upper_bounds[1])
+        initial_solution = (encode(x1_initial, lower_bounds[0], upper_bounds[0], len_bit), encode(x2_initial, lower_bounds[1], upper_bounds[1], len_bit))
+        best_solution, best_value, values, temps = simulated_annealing(initial_solution, initial_temp, cooling_rate, stop_temp, lower_bounds, upper_bounds, len_bit, internal_loops)
+
+        if best_value > best_overall_value:
+            best_overall_value = best_value
+            best_overall_solution = best_solution
+            best_values = values
+            best_temps = temps
+
+    return best_overall_solution, best_overall_value, best_values, best_temps
+
+# 초기 설정
+len_bit = 16
+lower_bounds = [-3, 4.1]
+upper_bounds = [12.1, 5.8]
+initial_temp = 1000.0  # 초기 온도 높임
+cooling_rate = 0.99  # 냉각률 높임
+stop_temp = 1e-10  # 더 낮은 온도까지 탐색
+internal_loops = 5000  # 내부 루프 횟수 크게 증가
+
+# 최적의 해 찾기
+best_solution, best_value, values, temps = find_best_solution(runs=20)
+
+# 결과 출력
+best_x1 = decode(best_solution[0], lower_bounds[0], upper_bounds[0], len_bit)
+best_x2 = decode(best_solution[1], lower_bounds[1], upper_bounds[1], len_bit)
+print(f"최적 해: x1 = {best_x1}, x2 = {best_x2}")
+print(f"최적 값: {best_value}")
+
+# 그래프 그리기
+plt.figure(figsize=(12, 6))
+
+plt.subplot(1, 2, 1)
+plt.plot(values)
+plt.xlabel('Iteration')
+plt.ylabel('Objective Value')
+plt.title('Objective Value Over Iterations')
+
+plt.subplot(1, 2, 2)
+plt.plot(temps)
+plt.xlabel('Iteration')
+plt.ylabel('Temperature')
+plt.title('Temperature Over Iterations')
+
+plt.tight_layout()
+plt.show()
